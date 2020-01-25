@@ -33,5 +33,6 @@ func main() {
 	log.Printf("Serving %s on HTTP port: %s\n", d.Srv, *port)
 	log.Fatal(http.ListenAndServe(":"+*port, nil))
 }
-
+```
+![alt-text][screenshot] (https://github.com/rmasci/fileserver/Fileserver.png "Screenshot Fileserver.png")
 Todo: Document code, document better examples.
