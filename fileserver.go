@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
+	"log"
 	"github.com/pyk/byten"
 )
 
@@ -16,6 +16,7 @@ type Directory struct {
 	Srv     string
 	Px      int
 	BaseURI string
+	Lgout *log.Logger
 }
 
 func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +68,8 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "</table><hr></body></html>")
 		return
 	} else {
-
+		
+		// Detect Content Type
 		openFile, err := os.Open(srv)
 		defer openFile.Close()
 		if err != nil {
@@ -77,7 +79,10 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 		FileHeader := make([]byte, 512)
 		openFile.Read(FileHeader)
 		FileContentType := http.DetectContentType(FileHeader)
-		if strings.HasPrefix(FileContentType, "text/") {
+		d.Lgout.Printf("Filename: %v, Mimetype: %v\n", srv, FileContentType)
+		// 
+
+		if !strings.Contains(FileContentType, "executable") {
 			openFile.Seek(0, 0)
 			io.Copy(w, openFile)
 			//http.Error(w, "OK", 200)
