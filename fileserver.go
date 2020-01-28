@@ -17,6 +17,7 @@ type Directory struct {
 	Px      int
 	BaseURI string
 	Lgout *log.Logger
+	Header string
 }
 
 func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
@@ -39,15 +40,20 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "Error: %v", err)
 			http.Error(w, fmt.Sprintf("%v", err), 404)
 			return
+		} 
+		fmt.Fprintln(w, "<html><head><style>table, th, td {border: 0px;padding: 0px;} tr:nth-child(odd) {background-color: #E0E0E0;}</style></head>")
+		if d.Header != "" {
+			fmt.Fprintf(w, "<body><br><br><br><h1>%v</h1>\n",strings.Title(d.Header))
+		} else {
+			fmt.Fprintln(w, "<body><br><br><br>")
 		}
-		fmt.Fprintln(w, "<html><body><br><br><br>")
 		if len(reqDirA) > 0 {
 			i := len(reqDirA) - 1
 			upDir := strings.Join(reqDirA[:i], "/")
 			fmt.Fprintf(w, "<a href='%v/%v'>Parent Directory</a>", d.BaseURI, upDir)
 		}
-		fmt.Fprintln(w, "<hr><table td{ border: 0;}")
-		fmt.Fprintln(w, "<tr><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td><td>Name</td><td>Size</td><td>Date</td></tr>")
+		fmt.Fprintln(w, "<hr><table style 100%>")
+		fmt.Fprintln(w, "<tr><th>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th><th>Name</th><th>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th><th>Size</th><th>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th><th>Date</th></tr>")
 		for _, f := range fslist {
 			var ico string
 			fstat, err := os.Stat(f)
@@ -62,7 +68,7 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 			//link := fmt.Sprintf("<a href='%v/%v'>%v</a>", r.URL, fstat.Name(), fstat.Name())
 			link := fmt.Sprintf("<a href='%v/%v'>%v</a>", r.RequestURI, fstat.Name(), fstat.Name())
 			// 'File Permissions' 'Link to file', 'File name' 'file size' 'file modifiied'
-			out := fmt.Sprintf("<tr><td>%v</td><td>%v</td><td>%v</td><td>%v</td></tr>", ico, link, byten.Size(fstat.Size()), fstat.ModTime().Format(timeFormat))
+			out := fmt.Sprintf("<tr><td>%v</td><td>%v</td><td></td><td>%v</td><td></td><td>%v</td></tr>", ico, link, byten.Size(fstat.Size()), fstat.ModTime().Format(timeFormat))
 			fmt.Fprintf(w, "%v", out)
 		}
 		fmt.Fprintln(w, "</table><hr></body></html>")
