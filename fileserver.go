@@ -3,12 +3,13 @@ package fileserver
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"log"
+
 	"github.com/pyk/byten"
 )
 
@@ -16,34 +17,34 @@ type Directory struct {
 	Srv     string
 	Px      int
 	BaseURI string
-	Lgout *log.Logger
-	Header string
+	Lgout   *log.Logger
+	Header  string
 }
 
 func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 	timeFormat := "2006-01-02 15:04:05"
 	reqDir := strings.Trim(r.RequestURI, "/")
+	reqCount := len(strings.Split(strings.Trim(d.BaseURI, "/"), "/"))
 	blackFile := blackFile(d.Px)
 	blackFolder := blackFolder(d.Px)
-	reqDirA := strings.Split(reqDir, "/")[1:]
+	reqDirA := strings.Split(reqDir, "/")[reqCount:]
 	srv := fmt.Sprintf("%v/%v", d.Srv, strings.TrimRight(strings.Join(reqDirA, "/"), "/"))
 	dir, err := os.Stat(srv)
-	//dir,err := os.Stat("/Users/rx7322/go")
 	if err != nil {
-		fmt.Fprintf(w, "Error: %v", err)
+		w.WriteHeader(404)
 		http.Error(w, fmt.Sprintf("%v", err), 404)
 		return
 	}
 	if dir.IsDir() {
 		fslist, err := filepath.Glob(srv + "/*")
 		if err != nil {
-			fmt.Fprintf(w, "Error: %v", err)
+			w.WriteHeader(404)
 			http.Error(w, fmt.Sprintf("%v", err), 404)
 			return
-		} 
+		}
 		fmt.Fprintln(w, "<html><head><style>table, th, td {border: 0px;padding: 0px;} tr:nth-child(odd) {background-color: #E0E0E0;}</style></head>")
 		if d.Header != "" {
-			fmt.Fprintf(w, "<body><br><br><br><h1>%v</h1>\n",strings.Title(d.Header))
+			fmt.Fprintf(w, "<body><br><br><br><h1>%v</h1>\n", strings.Title(d.Header))
 		} else {
 			fmt.Fprintln(w, "<body><br><br><br>")
 		}
@@ -74,7 +75,7 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "</table><hr></body></html>")
 		return
 	} else {
-		
+
 		// Detect Content Type
 		openFile, err := os.Open(srv)
 		defer openFile.Close()
@@ -86,7 +87,7 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 		openFile.Read(FileHeader)
 		FileContentType := http.DetectContentType(FileHeader)
 		d.Lgout.Printf("Filename: %v, Mimetype: %v\n", srv, FileContentType)
-		// 
+		//
 
 		if !strings.Contains(FileContentType, "executable") {
 			openFile.Seek(0, 0)
