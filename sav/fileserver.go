@@ -6,13 +6,13 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/pyk/byten"
-	blackfriday "github.com/russross/blackfriday/v2"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type Directory struct {
@@ -21,21 +21,33 @@ type Directory struct {
 	BaseURI string
 	Lgout   *log.Logger
 	Header  string
+	Nginx   string
 }
 
 func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
-	//var upDir string
+	if d.Nginx != "" {
+		strings.Trim(d.Nginx, "/")
+		d.Nginx += "/"
+	}
+	c := cases.Title(language.Und)
+	d.Lgout.Println("URI", r.RequestURI)
 	timeFormat := "2006-01-02 15:04:05"
-	reqDir := strings.Trim(r.RequestURI, "/")
-	reqCount := len(strings.Split(strings.Trim(d.BaseURI, "/"), "/"))
-	blackFile := blackFile(d.Px)
-	blackFolder := blackFolder(d.Px)
-	reqDirA := strings.Split(reqDir, "/")[reqCount:]
-	srv := fmt.Sprintf("%v/%v", d.Srv, strings.TrimRight(strings.Join(reqDirA, "/"), "/"))
+	/*
+		reqDir := strings.Trim(r.RequestURI, "/")
+		reqCount := len(strings.Split(strings.Trim(d.BaseURI, "/"), "/"))
+		blackFile := blackFile(d.Px)
+		blackFolder := blackFolder(d.Px)
+		reqDirA := strings.Split(reqDir, "/")[reqCount:]
+	*/
+	userReq := strings.ReplaceAll(r.RequestURI, d.BaseURI, "")
+	reqDirA := strings.Split(userReq, "/")
+	srv := fmt.Sprintf("%s/%s", d.Srv, userReq)
+
 	dir, err := os.Stat(srv)
 	if err != nil {
+		d.Lgout.Printf("%v Dir: %v\n", err, dir)
 		w.WriteHeader(404)
-		http.Error(w, fmt.Sprintf("%v", err), 404)
+		http.Error(w, fmt.Sprintf("%v Dir: %v", err, dir), 404)
 		return
 	}
 	if dir.IsDir() {
@@ -45,20 +57,18 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("%v", err), 404)
 			return
 		}
-		fmt.Fprintln(w, "<html>\n\t<head>\n\t\t<style>table, th, td {border: 0px;padding: 0px;} tr:nth-child(odd) {background-color: #E0E0E0;}\n\t\t</style>\n\t</head>")
+		fmt.Fprintln(w, "<html><head><style>table, th, td {border: 0px;padding: 0px;} tr:nth-child(odd) {background-color: #E0E0E0;}</style></head>")
 		if d.Header != "" {
-			fmt.Fprintf(w, "\t<body>\n\t<br>\n\t<br>\n\t<br>\n\t<h1>%v</h1>\n", strings.Title(d.Header))
+			fmt.Fprintf(w, "<body><br><br><br><h1>%v</h1>\n", c.String(d.Header))
 		} else {
-			fmt.Fprintln(w, "\t<body>\n\t<br>\n\t<br>\n\t<br>")
+			fmt.Fprintln(w, "<body><br><br><br>")
 		}
 		if len(reqDirA) > 0 {
-			// if r.RequestURI has a '/' on the end, it will not remove the last directory
-			upDir := path.Dir(strings.TrimRight(r.RequestURI, "/"))
-
-			fmt.Fprintf(w, "\t<a href='%v/'>Parent Directory</a>\n", upDir)
+			//i := len(reqDirA) - 1
+			//upDir := strings.Join(reqDirA[:i], "/")
 		}
-		fmt.Fprintln(w, "\t<hr>\n\t<table style 100%>")
-		fmt.Fprintln(w, "\t\t<tr>\t\t\t<th>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th>\n\t\t\t<th>Name</th><th>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th>\n\t\t\t<th>Size</th>\n\t\t\t<th>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th>\n\t\t\t<th>Date</th>\n\t\t</tr>")
+		fmt.Fprintln(w, "<hr><table style 100%>")
+		fmt.Fprintln(w, "<tr><th>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th><th>Name</th><th>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th><th>Size</th><th>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th><th>Date</th></tr>")
 		for _, f := range fslist {
 			var ico string
 			fstat, err := os.Stat(f)
@@ -66,21 +76,20 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			if fstat.IsDir() {
-				ico = blackFolder
+				ico = blackFolder(d.Px)
 			} else {
-				ico = blackFile
+				ico = blackFile(d.Px)
 			}
 			//link := fmt.Sprintf("<a href='%v/%v'>%v</a>", r.URL, fstat.Name(), fstat.Name())
-			link := fmt.Sprintf("<a href='%v/%v'>%v</a>", r.RequestURI, fstat.Name(), fstat.Name())
+			link := fmt.Sprintf("<a href='%s/%v%v'>%v</a>", d.Nginx, r.RequestURI, fstat.Name(), fstat.Name())
 			// 'File Permissions' 'Link to file', 'File name' 'file size' 'file modifiied'
-			link = strings.ReplaceAll(link, "//", "/")
-			out := fmt.Sprintf("\n\t\t<tr>\n\t\t\t<td>%v</td>\n\t\t\t<td>%v</td>\n\t\t\t<td></td>\n\t\t\t<td>%v</td>\n\t\t\t<td></td>\n\t\t\t<td>%v</td>\n\t\t</tr>\n", ico, link, byten.Size(fstat.Size()), fstat.ModTime().Format(timeFormat))
+			out := fmt.Sprintf("<tr><td>%v</td><td>%v</td><td></td><td>%v</td><td></td><td>%v</td></tr>", ico, link, byten.Size(fstat.Size()), fstat.ModTime().Format(timeFormat))
 			fmt.Fprintf(w, "%v", out)
 		}
-		fmt.Fprintln(w, "\n\t\t\t</table>\n\t\t<hr>\n\t</body>\n</html>")
+		fmt.Fprintln(w, "</table><hr></body></html>")
 		return
 	} else {
-		d.Lgout.Println("Open", srv)
+
 		// Detect Content Type
 		openFile, err := os.Open(srv)
 		defer openFile.Close()
@@ -95,19 +104,6 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 		//
 
 		if !strings.Contains(FileContentType, "executable") {
-			if filepath.Ext(srv) == ".md" {
-				d.Lgout.Println("Render Markdown", srv)
-				source, err := io.ReadAll(openFile)
-				if err != nil {
-					d.Lgout.Println("Could not read", srv)
-					fmt.Fprintln(w, "Could not read", srv)
-					return
-				} else {
-					d.Lgout.Println("ext", filepath.Ext(srv))
-				}
-				output := blackfriday.Run(source)
-				fmt.Fprintf(w, string(output))
-			}
 			openFile.Seek(0, 0)
 			io.Copy(w, openFile)
 			//http.Error(w, "OK", 200)
