@@ -3,8 +3,9 @@ module github.com/rmasci/fileserver
 go 1.19
 
 require (
+	github.com/gomarkdown/markdown v0.0.0-20220905174103-7b278df48cfb
 	github.com/pyk/byten v0.0.0-20140925233358-f847a130bf6d
-	github.com/russross/blackfriday/v2 v2.1.0
+	github.com/shurcooL/github_flavored_markdown v0.0.0-20210228213109-c3a9aa474629
 	golang.org/x/text v0.3.7
 )
 
@@ -14,7 +15,8 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.20 // indirect
 	github.com/russross/blackfriday v1.5.2 // indirect
 	github.com/sergi/go-diff v1.2.0 // indirect
-	github.com/shurcooL/github_flavored_markdown v0.0.0-20210228213109-c3a9aa474629 // indirect
+	github.com/shurcooL/go v0.0.0-20200502201357-93f07166e636 // indirect
+	github.com/shurcooL/go-goon v1.0.0 // indirect
 	github.com/shurcooL/highlight_diff v0.0.0-20181222201841-111da2e7d480 // indirect
 	github.com/shurcooL/highlight_go v0.0.0-20191220051317-782971ddf21b // indirect
 	github.com/shurcooL/octicon v0.0.0-20191102190552-cbb32d6a785c // indirect
