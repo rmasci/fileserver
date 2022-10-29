@@ -3,7 +3,6 @@ module github.com/rmasci/fileserver
 go 1.19
 
 require (
-	github.com/gomarkdown/markdown v0.0.0-20220905174103-7b278df48cfb
 	github.com/pyk/byten v0.0.0-20140925233358-f847a130bf6d
 	github.com/shurcooL/github_flavored_markdown v0.0.0-20210228213109-c3a9aa474629
 	golang.org/x/text v0.3.7

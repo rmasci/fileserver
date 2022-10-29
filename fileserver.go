@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gomarkdown/markdown"
 	"github.com/pyk/byten"
+	//blackfriday "github.com/russross/blackfriday/v2"
 )
 
 type Directory struct {
@@ -21,10 +21,12 @@ type Directory struct {
 	BaseURI string
 	Lgout   *log.Logger
 	Header  string
+	Directory string
 }
 
 func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 	//var upDir string
+	var sty string
 	timeFormat := "2006-01-02 15:04:05"
 	reqDir := strings.Trim(r.RequestURI, "/")
 	reqCount := len(strings.Split(strings.Trim(d.BaseURI, "/"), "/"))
@@ -45,11 +47,13 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("%v", err), 404)
 			return
 		}
-		fmt.Fprintln(w, "<html>\n\t<head>\n\t\t<style>table, th, td {border: 0px;padding: 0px;} tr:nth-child(odd) {background-color: #E0E0E0;}\n\t\t</style>\n\t</head>")
+		//fmt.Fprintln(w, "<html>\n\t<head>\n\t\t<style>table, th, td {border: 0px;padding: 0px;} tr:nth-child(odd) {background-color: #E0E0E0;}\n\t\t</style>\n\t</head>")
+		fmt.Fprintln(w,"<html><head><link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css\" integrity=\"sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm\" crossorigin=\"anonymous\"></head><body>")
+		fmt.Fprintln(w,`<div class="container"`)
 		if d.Header != "" {
 			fmt.Fprintf(w, "\t<body>\n\t<br>\n\t<br>\n\t<br>\n\t<h1>%v</h1>\n", strings.Title(d.Header))
 		} else {
-			fmt.Fprintln(w, "\t<body>\n\t<br>\n\t<br>\n\t<br>")
+			fmt.Fprintln(w, "<body><br><br><br>")
 		}
 		if len(reqDirA) > 0 {
 			// if r.RequestURI has a '/' on the end, it will not remove the last directory
@@ -57,9 +61,11 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 
 			fmt.Fprintf(w, "\t<a href='%v/'>Parent Directory</a>\n", upDir)
 		}
-		fmt.Fprintln(w, "\t<hr>\n\t<table style 100%>")
-		fmt.Fprintln(w, "\t\t<tr>\t\t\t<th>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th>\n\t\t\t<th>Name</th><th>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th>\n\t\t\t<th>Size</th>\n\t\t\t<th>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th>\n\t\t\t<th>Date</th>\n\t\t</tr>")
-		for _, f := range fslist {
+
+		fmt.Fprintln(w, `<hr><table class="table table-striped table-hover">`)
+		fmt.Fprintln(w,`<thead class="thead-dark">`)
+		fmt.Fprintln(w, `<tr><th style="width: 3%" ></th><th>Name</th><th>Size</th><th>Date</th></tr>`)
+		for i, f := range fslist {
 			var ico string
 			fstat, err := os.Stat(f)
 			if err != nil {
@@ -70,14 +76,20 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 			} else {
 				ico = blackFile
 			}
+			//Odd or even:
+			if(i%2==0){
+				sty=fmt.Sprint(`class="table-light"`)
+			}else{
+				sty=fmt.Sprint(`class="table-light"`)
+			}
 			//link := fmt.Sprintf("<a href='%v/%v'>%v</a>", r.URL, fstat.Name(), fstat.Name())
 			link := fmt.Sprintf("<a href='%v/%v'>%v</a>", r.RequestURI, fstat.Name(), fstat.Name())
 			// 'File Permissions' 'Link to file', 'File name' 'file size' 'file modifiied'
 			link = strings.ReplaceAll(link, "//", "/")
-			out := fmt.Sprintf("\n\t\t<tr>\n\t\t\t<td>%v</td>\n\t\t\t<td>%v</td>\n\t\t\t<td></td>\n\t\t\t<td>%v</td>\n\t\t\t<td></td>\n\t\t\t<td>%v</td>\n\t\t</tr>\n", ico, link, byten.Size(fstat.Size()), fstat.ModTime().Format(timeFormat))
+			out := fmt.Sprintf("\n\t\t<tr %s>\n\t\t\t<td>%v</td>\n\t\t\t<td>%v</td>\n\t\t\t<td>%v</td>\n\t\t\t<td>%v</td>\n\t\t</tr>\n", sty, ico, link, byten.Size(fstat.Size()), fstat.ModTime().Format(timeFormat))
 			fmt.Fprintf(w, "%v", out)
 		}
-		fmt.Fprintln(w, "\n\t\t\t</table>\n\t\t<hr>\n\t</body>\n</html>")
+		fmt.Fprintln(w, "\n\t\t\t</table></div>\n\t\t<hr>\n\t</body>\n</html>")
 		return
 	} else {
 		d.Lgout.Println("Open", srv)
@@ -105,10 +117,8 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 				} else {
 					d.Lgout.Println("ext", filepath.Ext(srv))
 				}
-				output := markdown.ToHTML(source, nil, nil)
-				//w.Write(output)
-				fmt.Fprintln(w, string(output))
-
+				output := source //blackfriday.Run(source)
+				fmt.Fprintf(w, string(output))
 			}
 			openFile.Seek(0, 0)
 			io.Copy(w, openFile)
