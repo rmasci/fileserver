@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/pyk/byten"
-	//blackfriday "github.com/russross/blackfriday/v2"
+	blackfriday "github.com/russross/blackfriday/v2"
 )
 
 type Directory struct {
@@ -117,7 +117,7 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 				} else {
 					d.Lgout.Println("ext", filepath.Ext(srv))
 				}
-				output := source //blackfriday.Run(source)
+				output := blackfriday.Run(source)
 				fmt.Fprintf(w, string(output))
 			}
 			openFile.Seek(0, 0)

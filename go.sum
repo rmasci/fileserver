@@ -18,6 +18,8 @@ github.com/pyk/byten v0.0.0-20140925233358-f847a130bf6d h1:/0nqYrqVyPTVDT2jPx9z9
 github.com/pyk/byten v0.0.0-20140925233358-f847a130bf6d/go.mod h1:El8LdwAxb76Ih0mRmpu9uMVq+ajiqGSxmYiUe+nSr+w=
 github.com/russross/blackfriday v1.5.2 h1:HyvC0ARfnZBqnXwABFeSZHpKvJHJJfPz81GNueLj0oo=
 github.com/russross/blackfriday v1.5.2/go.mod h1:JO/DiYxRf+HjHt06OyowR9PTA263kcR/rfWxYHBV53g=
+github.com/russross/blackfriday/v2 v2.1.0 h1:JIOH55/0cWyOuilr9/qlrm0BSXldqnqwMsf35Ld67mk=
+github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/sergi/go-diff v1.2.0 h1:XU+rvMAioB0UC3q1MFrIQy4Vo5/4VsRDQQXHsEya6xQ=
 github.com/sergi/go-diff v1.2.0/go.mod h1:STckp+ISIX8hZLjrqAeVduY0gWCT9IjLuqbuNXdaHfM=
 github.com/shurcooL/github_flavored_markdown v0.0.0-20210228213109-c3a9aa474629 h1:86e54L0i3pH3dAIA8OxBbfLrVyhoGpnNk1iJCigAWYs=
