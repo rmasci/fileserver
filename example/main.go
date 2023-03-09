@@ -1,24 +1,47 @@
 package main
 
 import (
-	"flag"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/rmasci/fileserver"
 )
 
-func main() {
-	var d fileserver.Directory
-	d.Px = 15
-	// Need to have this set to the uri you want the user to use: http://yourserver.dom.com/download
-	d.BaseURI = "/download/"
-	port := flag.String("p", "8100", "port to serve on")
-	flag.StringVar(&d.Srv, "d", "/var/www/html", "the directory of static file to host")
-	flag.Parse()
+var lgOut *log.Logger
+var nginx string
 
-	//http.Handle("/", http.FileServer(http.Dir(*directory)))
-	http.Handle(d.BaseURI, http.StripPrefix("/", http.HandlerFunc(d.Fileserver)))
-	log.Printf("Serving %s on HTTP port: %s\n", d.Srv, *port)
-	log.Fatal(http.ListenAndServe(":"+*port, nil))
+func main() {
+	lgOut = log.New(os.Stdout, "", log.Lshortfile)
+	nginx = "nginx"
+	lgOut.Println(pattern("downloads"))
+	dwnld := fileserver.Directory{
+		Px:      15,
+		Srv:     "/var/www/html",
+		BaseURI: pattern("downloads"),
+		Lgout:   lgOut,
+		Header:  "MyFiles",
+	}
+
+	// Start web server
+	http.Handle(pattern("downloads"), http.StripPrefix(pattern("downloads/"), http.HandlerFunc(dwnld.Fileserver)))
+	http.HandleFunc("/", printpath)
+	err := http.ListenAndServe(":8789", nil)
+	if err != nil {
+		fmt.Println("Error")
+	}
+}
+func pattern(path string) string {
+	path = strings.Trim(path, "/")
+	nginx = strings.Trim(nginx, "/")
+	retstr := fmt.Sprintf("/%s/%s/", nginx, path)
+	retstr = strings.ReplaceAll(retstr, "//", "/")
+	return retstr
+}
+
+func printpath(w http.ResponseWriter, r *http.Request) {
+	lgOut.Println(r.RequestURI)
+	fmt.Fprintf(w, "<html><h1>URI</h1><hr>%v</html>", r.RequestURI)
 }

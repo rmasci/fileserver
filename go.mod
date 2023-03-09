@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/pyk/byten v0.0.0-20140925233358-f847a130bf6d
 	github.com/shurcooL/github_flavored_markdown v0.0.0-20210228213109-c3a9aa474629
-	golang.org/x/text v0.3.7
+	golang.org/x/text v0.8.0
 )
 
 require (
@@ -23,5 +23,5 @@ require (
 	github.com/shurcooL/sanitized_anchor_name v1.0.0 // indirect
 	github.com/sourcegraph/annotate v0.0.0-20160123013949-f4cad6c6324d // indirect
 	github.com/sourcegraph/syntaxhighlight v0.0.0-20170531221838-bd320f5d308e // indirect
-	golang.org/x/net v0.0.0-20220927171203-f486391704dc // indirect
+	golang.org/x/net v0.8.0 // indirect
 )

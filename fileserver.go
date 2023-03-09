@@ -1,5 +1,9 @@
 package fileserver
 
+/*
+Todo: add buttons for <link><wget link>
+*/
+
 import (
 	"fmt"
 	"io"
