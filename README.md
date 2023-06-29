@@ -1,10 +1,6 @@
-Fileserver offers a more advanced file server than the basic file server that is a part of Go.
+Fileserver offers a file server that gives you information on the files in the directory such as size, text, binary, directory.  The file server also has a built in logger that can log to a file or to stdout. It also allows you to specify a directory that is outside of the path your binary is running in. 
 
-In Go to serve a directory you can pass something like this:
-```
-http.Handle("/", http.FileServer(http.Dir(*directory)))
-```
-When you go to "/" you get a basic list of files that you can click on.  What this fileserver does is offer more information on the files.
+In the example, when you go to "http://localhost:8888/downloads" you get a basic list of files that you can click on, see screenshot below.  
 
 Example:
 
