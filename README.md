@@ -33,5 +33,5 @@ func main() {
 }
 ```
 Screenshot:<br>
-<img="Fileserver.png"><br>
+![alt text](https://github.com/rmasci/fileserver/blob/main/Fileserver.png?raw=true)
 Todo: Document code, document better examples.

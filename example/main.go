@@ -14,7 +14,7 @@ func main() {
 	dwnld := fileserver.Directory{
 		Lgout:  log.New(os.Stdout, "", log.Lshortfile),
 		Px:     15,
-		Srv:    "/var/tmp/html",
+		Srv:    "../",
 		Header: "MyFiles",
 	}
 
