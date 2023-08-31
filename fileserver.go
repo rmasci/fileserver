@@ -1,6 +1,7 @@
 package fileserver
 
 /*
+Todo: Use Go templates -- add <copy link> <wget>
 Todo: add buttons for <link><wget link>
 */
 
@@ -20,12 +21,13 @@ import (
 )
 
 type Directory struct {
-	Srv     string
-	Px      int
-	BaseURI string
-	Lgout   *log.Logger
-	Header  string
+	Srv       string
+	Px        int
+	BaseURI   string
+	Lgout     *log.Logger
+	Header    string
 	Directory string
+	Template  string // location either in embed or elsewhere. I'll put a default in.
 }
 
 func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
@@ -52,8 +54,8 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		//fmt.Fprintln(w, "<html>\n\t<head>\n\t\t<style>table, th, td {border: 0px;padding: 0px;} tr:nth-child(odd) {background-color: #E0E0E0;}\n\t\t</style>\n\t</head>")
-		fmt.Fprintln(w,"<html><head><link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css\" integrity=\"sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm\" crossorigin=\"anonymous\"></head><body>")
-		fmt.Fprintln(w,`<div class="container"`)
+		fmt.Fprintln(w, "<html><head><link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css\" integrity=\"sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm\" crossorigin=\"anonymous\"></head><body>")
+		fmt.Fprintln(w, `<div class="container"`)
 		if d.Header != "" {
 			fmt.Fprintf(w, "\t<body>\n\t<br>\n\t<br>\n\t<br>\n\t<h1>%v</h1>\n", strings.Title(d.Header))
 		} else {
@@ -67,7 +69,7 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 		}
 
 		fmt.Fprintln(w, `<hr><table class="table table-striped table-hover">`)
-		fmt.Fprintln(w,`<thead class="thead-dark">`)
+		fmt.Fprintln(w, `<thead class="thead-dark">`)
 		fmt.Fprintln(w, `<tr><th style="width: 3%" ></th><th>Name</th><th>Size</th><th>Date</th></tr>`)
 		for i, f := range fslist {
 			var ico string
@@ -81,10 +83,10 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 				ico = blackFile
 			}
 			//Odd or even:
-			if(i%2==0){
-				sty=fmt.Sprint(`class="table-light"`)
-			}else{
-				sty=fmt.Sprint(`class="table-light"`)
+			if i%2 == 0 {
+				sty = fmt.Sprint(`class="table-light"`)
+			} else {
+				sty = fmt.Sprint(`class="table-light"`)
 			}
 			//link := fmt.Sprintf("<a href='%v/%v'>%v</a>", r.URL, fstat.Name(), fstat.Name())
 			link := fmt.Sprintf("<a href='%v/%v'>%v</a>", r.RequestURI, fstat.Name(), fstat.Name())
