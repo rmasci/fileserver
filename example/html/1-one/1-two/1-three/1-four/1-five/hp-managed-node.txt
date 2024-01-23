@@ -1,0 +1,1 @@
+hp-managed-node.txt

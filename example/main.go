@@ -1,30 +1,35 @@
 package main
 
 import (
-	"fmt"
-	"github.com/rmasci/fileserver"
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/rmasci/fileserver"
 )
 
 var lgOut *log.Logger
 
 func main() {
+	html := os.Getenv("PWD") + "/html"
+	lgOut := log.New(os.Stdout, "", log.Lshortfile)
 	dwnld := fileserver.Directory{
-		Lgout:  log.New(os.Stdout, "", log.Lshortfile),
+		Lgout:  lgOut,
 		Px:     15,
-		Srv:    "../",
+		Srv:    html,
 		Header: "MyFiles",
 	}
 
-	// Start web server
-	http.Handle("/downloads/", dwnld)
-	http.HandleFunc("/", wrongUrl)
-	log.Fatal(http.ListenAndServe(":8888", nil))
-}
+	http.HandleFunc("/downloads/", dwnld.Fileserver)
+	//redirect to downloads
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/downloads/", http.StatusFound)
+	})
 
-func wrongUrl(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<a href="http://%v/%vdownloads">Go Here</a>`, r.Host, r.URL.Path)
+	// let user know when server is listening on port
+	lgOut.Println("Listening on port 8888")
+
+	if err := http.ListenAndServe(":8888", nil); err != nil {
+		log.Fatal(err)
+	}
 }
