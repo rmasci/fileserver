@@ -12,27 +12,39 @@ Example:
 package main
 
 import (
-	"flag"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/rmasci/fileserver"
 )
 
-func main() {
-	var d fileserver.Directory
-	d.Px = 15
-    // Need to have this set to the uri you want the user to use: http://yourserver.dom.com/download
-	d.BaseURI = "/download/"
-	port := flag.String("p", "8100", "port to serve on")
-	flag.StringVar(&d.Srv, "d", "/var/www/html", "the directory of static file to host")
-	flag.Parse()
+var lgOut *log.Logger
 
-	//http.Handle("/", http.FileServer(http.Dir(*directory)))
-	http.Handle(d.BaseURI, http.StripPrefix("/", http.HandlerFunc(d.Fileserver)))
-	log.Printf("Serving %s on HTTP port: %s\n", d.Srv, *port)
-	log.Fatal(http.ListenAndServe(":"+*port, nil))
+func main() {
+	html := os.Getenv("PWD") + "/html"
+	lgOut := log.New(os.Stdout, "", log.Lshortfile)
+	dwnld := fileserver.Directory{
+		Lgout:  lgOut,
+		Px:     15,
+		Srv:    html,
+		Header: "MyFiles",
+	}
+
+	http.HandleFunc("/downloads/", dwnld.Fileserver)
+	//redirect to downloads
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/downloads/", http.StatusFound)
+	})
+
+	// let user know when server is listening on port
+	lgOut.Println("Listening on port 8888")
+
+	if err := http.ListenAndServe(":8888", nil); err != nil {
+		log.Fatal(err)
+	}
 }
+
 ```
 ![alt-text][screenshot] (https://github.com/rmasci/fileserver/Fileserver.png "Screenshot Fileserver.png")
 Todo: Document code, document better examples.
