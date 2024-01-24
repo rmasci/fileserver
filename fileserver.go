@@ -15,13 +15,13 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"unicode"
 
 	"github.com/gomarkdown/markdown"
-	"github.com/gomarkdown/markdown/html"
+	mdhtml "github.com/gomarkdown/markdown/html"
 	"github.com/gomarkdown/markdown/parser"
-
 	"github.com/pyk/byten"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type Directory struct {
@@ -35,7 +35,8 @@ type Directory struct {
 	Lgout     *log.Logger
 	Header    string
 	Directory string
-	Template  string // location either in embed or elsewhere. I'll put a default in.
+	Template  string
+	// location either in embed or elsewhere. I'll put a default in.
 }
 
 func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +69,8 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 		// Detect if there is a default file in there.
 		if d.DefPlace && d.Default != "" {
 			for _, f := range fslist {
-				if f == d.Default {
+				if filepath.Base(f) == d.Default {
+					d.Lgout.Printf("found Default, displaying it%s", filepath.Base(f))
 					b, err := os.ReadFile(srv + "/" + f)
 					if err != nil {
 						fmt.Fprintf(w, "<b>Error Reading %s</b>%v", err)
@@ -125,8 +127,9 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "\n\t\t\t</table></div>\n\t\t<hr>\n\t")
 		if !d.DefPlace && d.Default != "" {
 			for _, f := range fslist {
-				if f == d.Default {
-					b, err := os.ReadFile(srv + "/" + f)
+				if filepath.Base(f) == d.Default {
+					d.Lgout.Printf("found Default, displaying it %s", filepath.Base(f))
+					b, err := os.ReadFile(f)
 					if err != nil {
 						fmt.Fprintf(w, "<b>Error Reading %s</b>%v", err)
 					}
@@ -159,7 +162,8 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(FileContentType, "executable") {
 			if filepath.Ext(srv) == ".md" {
 				d.Lgout.Println("Render Markdown", srv)
-				source, err := io.ReadAll(openFile)
+				source, err := os.ReadFile(srv)
+				d.Lgout.Println("len source", len(source), err)
 				if err != nil {
 					d.Lgout.Println("Could not read", srv)
 					fmt.Fprintln(w, "Could not read", srv)
@@ -202,23 +206,23 @@ func blackFile(px int) (ico string) {
 }
 
 func toTitle(input string) string {
-	return strings.Map(func(r rune) rune {
-		if unicode.IsLetter(r) {
-			return unicode.ToTitle(r)
-		}
-		return r
-	}, input)
+	return cases.Title(language.English).String(string)
 }
 func mdToHTML(md []byte) []byte {
-	// create markdown parser with extensions
-	extensions := parser.CommonExtensions | parser.AutoHeadingIDs | parser.NoEmptyLineBeforeBlock
-	p := parser.NewWithExtensions(extensions)
-	doc := p.Parse(md)
+	md = markdown.NormalizeNewlines(md)
+	exts := parser.CommonExtensions // parser.OrderedListStart | parser.NoEmptyLineBeforeBlock
+	p := parser.NewWithExtensions(exts)
+	doc := markdown.Parse(md, p)
 
-	// create HTML renderer with extensions
-	htmlFlags := html.CommonFlags | html.HrefTargetBlank
-	opts := html.RendererOptions{Flags: htmlFlags}
-	renderer := html.NewRenderer(opts)
+	htmlFlags := mdhtml.Smartypants |
+		mdhtml.SmartypantsFractions |
+		mdhtml.SmartypantsDashes |
+		mdhtml.SmartypantsLatexDashes
+	htmlOpts := mdhtml.RendererOptions{
+		Flags: htmlFlags,
+	}
+	renderer := mdhtml.NewRenderer(htmlOpts)
+	html := markdown.Render(doc, renderer)
+	return html
 
-	return markdown.Render(doc, renderer)
 }
