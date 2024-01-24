@@ -6,6 +6,7 @@ Todo: add buttons for <link><wget link>
 */
 
 import (
+	"embed"
 	"fmt"
 	"io"
 	"log"
@@ -15,32 +16,44 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"unicode"
-
-	"github.com/gomarkdown/markdown"
-	"github.com/gomarkdown/markdown/html"
-	"github.com/gomarkdown/markdown/parser"
 
 	"github.com/pyk/byten"
+	blackfriday "github.com/russross/blackfriday/v2"
 )
 
 type Directory struct {
-	// Render this as the default page.
-	Default string
-	// True renders the default on top, false is on bottom. Default is on bottom
-	DefPlace  bool
 	Srv       string
 	Px        int
 	BaseURI   string
 	Lgout     *log.Logger
 	Header    string
 	Directory string
+	Embed     embed.FS
 	Template  string // location either in embed or elsewhere. I'll put a default in.
 }
 
 func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
+	if d.Directory != "" {
+		d.fileserver(w, r)
+	} else if d.IsEmbedFsEmpty() {
+		d.embedserver(w, r)
+	} else {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		// send internal server error
+		w.WriteHeader(500)
+	}
+}
+
+func (d *Directory) IsEmbedFsEmpty() bool {
+	if _, err := d.Embed.ReadDir("/"); err != nil {
+		return true
+	} else {
+		return false
+	}
+}
+
+func (d *Directory) fileserver(w http.ResponseWriter, r *http.Request) {
 	//var upDir string
-	// This will hold the default page, if the d.Default file is found.
 	var sty string
 	timeFormat := "2006-01-02 15:04:05"
 	reqDir := strings.Trim(r.RequestURI, "/")
@@ -62,29 +75,11 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("%v", err), 404)
 			return
 		}
-
 		//fmt.Fprintln(w, "<html>\n\t<head>\n\t\t<style>table, th, td {border: 0px;padding: 0px;} tr:nth-child(odd) {background-color: #E0E0E0;}\n\t\t</style>\n\t</head>")
 		fmt.Fprintln(w, "<html><head><link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css\" integrity=\"sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm\" crossorigin=\"anonymous\"></head><body>")
-		// Detect if there is a default file in there.
-		if d.DefPlace && d.Default != "" {
-			for _, f := range fslist {
-				if f == d.Default {
-					b, err := os.ReadFile(srv + "/" + f)
-					if err != nil {
-						fmt.Fprintf(w, "<b>Error Reading %s</b>%v", err)
-					}
-					if filepath.Ext(srv) == ".md" {
-						w.Write(mdToHTML(b))
-					} else {
-						w.Write(b)
-					}
-					fmt.Fprintf(w, "<hr><br>")
-				}
-			}
-		}
 		fmt.Fprintln(w, `<div class="container"`)
 		if d.Header != "" {
-			fmt.Fprintf(w, "\t<body>\n\t<br>\n\t<br>\n\t<br>\n\t<h1>%v</h1>\n", toTitle(d.Header))
+			fmt.Fprintf(w, "\t<body>\n\t<br>\n\t<br>\n\t<br>\n\t<h1>%v</h1>\n", strings.Title(d.Header))
 		} else {
 			fmt.Fprintln(w, "<body><br><br><br>")
 		}
@@ -122,24 +117,7 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 			out := fmt.Sprintf("\n\t\t<tr %s>\n\t\t\t<td>%v</td>\n\t\t\t<td>%v</td>\n\t\t\t<td>%v</td>\n\t\t\t<td>%v</td>\n\t\t</tr>\n", sty, ico, link, byten.Size(fstat.Size()), fstat.ModTime().Format(timeFormat))
 			fmt.Fprintf(w, "%v", out)
 		}
-		fmt.Fprintln(w, "\n\t\t\t</table></div>\n\t\t<hr>\n\t")
-		if !d.DefPlace && d.Default != "" {
-			for _, f := range fslist {
-				if f == d.Default {
-					b, err := os.ReadFile(srv + "/" + f)
-					if err != nil {
-						fmt.Fprintf(w, "<b>Error Reading %s</b>%v", err)
-					}
-					if filepath.Ext(srv) == ".md" {
-						w.Write(mdToHTML(b))
-					} else {
-						w.Write(b)
-					}
-					fmt.Fprintf(w, "<hr><br>")
-				}
-			}
-		}
-		fmt.Fprintln(w, "</body>\n</html>")
+		fmt.Fprintln(w, "\n\t\t\t</table></div>\n\t\t<hr>\n\t</body>\n</html>")
 		return
 	} else {
 		d.Lgout.Println("Open", srv)
@@ -167,7 +145,8 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 				} else {
 					d.Lgout.Println("ext", filepath.Ext(srv))
 				}
-				w.Write(mdToHTML(source))
+				output := blackfriday.Run(source)
+				fmt.Fprintf(w, string(output))
 			}
 			openFile.Seek(0, 0)
 			io.Copy(w, openFile)
@@ -201,24 +180,112 @@ func blackFile(px int) (ico string) {
 	return ico
 }
 
-func toTitle(input string) string {
-	return strings.Map(func(r rune) rune {
-		if unicode.IsLetter(r) {
-			return unicode.ToTitle(r)
+func (d *Directory) embedserver(w http.ResponseWriter, r *http.Request) {
+	var sty string
+	timeFormat := "2006-01-02 15:04:05"
+	reqDir := strings.Trim(r.RequestURI, "/")
+	reqCount := len(strings.Split(strings.Trim(d.BaseURI, "/"), "/"))
+	blackFile := blackFile(d.Px)
+	blackFolder := blackFolder(d.Px)
+	reqDirA := strings.Split(reqDir, "/")[reqCount:]
+	srv := fmt.Sprintf("%v/%v", d.Srv, strings.TrimRight(strings.Join(reqDirA, "/"), "/"))
+
+	f, err := d.Embed.Open(srv)
+	if err != nil {
+		w.WriteHeader(404)
+		http.Error(w, fmt.Sprintf("%v", err), 404)
+		return
+	}
+	defer f.Close()
+
+	stat, err := f.Stat()
+	if err != nil {
+		w.WriteHeader(404)
+		http.Error(w, fmt.Sprintf("%v", err), 404)
+		return
+	}
+
+	if stat.IsDir() {
+		entries, err := d.Embed.ReadDir(srv + "/*")
+		if err != nil {
+			w.WriteHeader(404)
+			http.Error(w, fmt.Sprintf("%v", err), 404)
+			return
 		}
-		return r
-	}, input)
-}
-func mdToHTML(md []byte) []byte {
-	// create markdown parser with extensions
-	extensions := parser.CommonExtensions | parser.AutoHeadingIDs | parser.NoEmptyLineBeforeBlock
-	p := parser.NewWithExtensions(extensions)
-	doc := p.Parse(md)
+		// fmt.Fprintln(w, "<html>\n\t<head>\n\t\t<style>table, th, td {border: 0px;padding: 0px;} tr:nth-child(odd) {background-color: #E0E0E0;}\n\t\t</style>\n\t</head>")
+		fmt.Fprintln(w, "<html><head><link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css\" integrity=\"sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm\" crossorigin=\"anonymous\"></head><body>")
+		fmt.Fprintln(w, `<div class="container"`)
+		if d.Header != "" {
+			fmt.Fprintf(w, "\t<body>\n\t<br>\n\t<br>\n\t<br>\n\t<h1>%v</h1>\n", strings.Title(d.Header))
+		} else {
+			fmt.Fprintln(w, "<body><br><br><br>")
+		}
+		if len(reqDirA) > 0 {
+			// if r.RequestURI has a '/' on the end, it will not remove the last directory
+			upDir := path.Dir(strings.TrimRight(r.RequestURI, "/"))
 
-	// create HTML renderer with extensions
-	htmlFlags := html.CommonFlags | html.HrefTargetBlank
-	opts := html.RendererOptions{Flags: htmlFlags}
-	renderer := html.NewRenderer(opts)
+			fmt.Fprintf(w, "\t<a href='%v/'>Parent Directory</a>\n", upDir)
+		}
 
-	return markdown.Render(doc, renderer)
+		fmt.Fprintln(w, `<hr><table class="table table-striped table-hover">`)
+		fmt.Fprintln(w, `<thead class="thead-dark">`)
+		fmt.Fprintln(w, `<tr><th style="width: 3%" ></th><th>Name</th><th>Size</th><th>Date</th></tr>`)
+		for i, f := range entries {
+			var ico string
+			fstat, err := os.Stat(f)
+			if err != nil {
+				continue
+			}
+			if fstat.IsDir() {
+				ico = blackFolder
+			} else {
+				ico = blackFile
+			}
+			//Odd or even:
+			if i%2 == 0 {
+				sty = fmt.Sprint(`class="table-light"`)
+			} else {
+				sty = fmt.Sprint(`class="table-light"`)
+			}
+			//link := fmt.Sprintf("<a href='%v/%v'>%v</a>", r.URL, fstat.Name(), fstat.Name())
+			link := fmt.Sprintf("<a href='%v/%v'>%v</a>", r.RequestURI, fstat.Name(), fstat.Name())
+			// 'File Permissions' 'Link to file', 'File name' 'file size' 'file modifiied'
+			link = strings.ReplaceAll(link, "//", "/")
+			out := fmt.Sprintf("\n\t\t<tr %s>\n\t\t\t<td>%v</td>\n\t\t\t<td>%v</td>\n\t\t\t<td>%v</td>\n\t\t\t<td>%v</td>\n\t\t</tr>\n", sty, ico, link, byten.Size(fstat.Size()), fstat.ModTime().Format(timeFormat))
+			fmt.Fprintf(w, "%v", out)
+		}
+		fmt.Fprintln(w, "\n\t\t\t</table></div>\n\t\t<hr>\n\t</body>\n</html>")
+		return
+	} else {
+		d.Lgout.Println("Open", srv)
+		// Detect Content Type
+		openFile, err := d.Embed.Open(srv)
+		defer openFile.Close()
+		if err != nil {
+			http.Error(w, fmt.Sprintf("%v", err), 404)
+			return
+		}
+		FileHeader := make([]byte, 512)
+		openFile.Read(FileHeader)
+		FileContentType := http.DetectContentType(FileHeader)
+		d.Lgout.Printf("Filename: %v, Mimetype: %v\n", srv, FileContentType)
+
+		if !strings.Contains(FileContentType, "executable") {
+			if filepath.Ext(srv) == ".md" {
+				d.Lgout.Println("Render Markdown", srv)
+				source, err := io.ReadAll(openFile)
+				if err != nil {
+					d.Lgout.Println("Could not read", srv)
+					fmt.Fprintln(w, "Could not read", srv)
+					return
+				} else {
+					d.Lgout.Println("ext", filepath.Ext(srv))
+				}
+				output := blackfriday.Run(source)
+				fmt.Fprintf(w, string(output))
+			}
+			openFile.Seek(0, 0)
+			io.Copy(w, openFile)
+		}
+	}
 }
