@@ -6,6 +6,7 @@ Todo: add buttons for <link><wget link>
 */
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -16,10 +17,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gomarkdown/markdown"
-	mdhtml "github.com/gomarkdown/markdown/html"
-	"github.com/gomarkdown/markdown/parser"
 	"github.com/pyk/byten"
+	"github.com/yuin/goldmark"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -76,7 +75,12 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 						fmt.Fprintf(w, "<b>Error Reading %s</b>%v", err)
 					}
 					if filepath.Ext(srv) == ".md" {
-						w.Write(mdToHTML(b))
+						mdHtml, err := mdToHTML(b)
+						if err != nil {
+							d.Lgout.Println("Error converting markdown to html", err)
+							w.Write(b)
+						}
+						w.Write(mdHtml)
 					} else {
 						w.Write(b)
 					}
@@ -134,7 +138,12 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 						fmt.Fprintf(w, "<b>Error Reading %s</b>%v", err)
 					}
 					if filepath.Ext(srv) == ".md" {
-						w.Write(mdToHTML(b))
+						mdHtml, err := mdToHTML(b)
+						if err != nil {
+							d.Lgout.Println("Error converting markdown to html", err)
+							w.Write(b)
+						}
+						w.Write(mdHtml)
 					} else {
 						w.Write(b)
 					}
@@ -171,7 +180,12 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 				} else {
 					d.Lgout.Println("ext", filepath.Ext(srv))
 				}
-				w.Write(mdToHTML(source))
+				mdHtml, err := mdToHTML(source)
+				if err != nil {
+					d.Lgout.Println("Error converting markdown to html", err)
+					w.Write(source)
+				}
+				w.Write(mdHtml)
 			}
 			openFile.Seek(0, 0)
 			io.Copy(w, openFile)
@@ -206,23 +220,33 @@ func blackFile(px int) (ico string) {
 }
 
 func toTitle(input string) string {
-	return cases.Title(language.English).String(string)
+	return cases.Title(language.English).String(input)
 }
-func mdToHTML(md []byte) []byte {
-	md = markdown.NormalizeNewlines(md)
-	exts := parser.CommonExtensions // parser.OrderedListStart | parser.NoEmptyLineBeforeBlock
-	p := parser.NewWithExtensions(exts)
-	doc := markdown.Parse(md, p)
 
-	htmlFlags := mdhtml.Smartypants |
-		mdhtml.SmartypantsFractions |
-		mdhtml.SmartypantsDashes |
-		mdhtml.SmartypantsLatexDashes
-	htmlOpts := mdhtml.RendererOptions{
-		Flags: htmlFlags,
+//func mdToHTML(md []byte) []byte {
+//	md = markdown.NormalizeNewlines(md)
+//	exts := parser.CommonExtensions // parser.OrderedListStart | parser.NoEmptyLineBeforeBlock
+//	p := parser.NewWithExtensions(exts)
+//	doc := markdown.Parse(md, p)
+//
+//	htmlFlags := mdhtml.Smartypants |
+//		mdhtml.SmartypantsFractions |
+//		mdhtml.SmartypantsDashes |
+//		mdhtml.SmartypantsLatexDashes
+//	htmlOpts := mdhtml.RendererOptions{
+//		Flags: htmlFlags,
+//	}
+//	renderer := mdhtml.NewRenderer(htmlOpts)
+//	html := markdown.Render(doc, renderer)
+//	return html
+//
+//}
+
+func mdToHTML(md []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	err := goldmark.Convert(md, &buf)
+	if err != nil {
+		return nil, err
 	}
-	renderer := mdhtml.NewRenderer(htmlOpts)
-	html := markdown.Render(doc, renderer)
-	return html
-
+	return buf.Bytes(), nil
 }

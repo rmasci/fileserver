@@ -14,10 +14,11 @@ func main() {
 	html := os.Getenv("PWD") + "/html"
 	lgOut := log.New(os.Stdout, "", log.Lshortfile)
 	dwnld := fileserver.Directory{
-		Lgout:  lgOut,
-		Px:     15,
-		Srv:    html,
-		Header: "MyFiles",
+		Lgout:   lgOut,
+		Px:      15,
+		Srv:     html,
+		Header:  "MyFiles",
+		Default: "index.html",
 	}
 
 	http.HandleFunc("/downloads/", dwnld.Fileserver)
