@@ -11,13 +11,17 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/http/cgi"
+	"net/url"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/pyk/byten"
+	"github.com/rmasci/script"
 	"github.com/yuin/goldmark"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -35,20 +39,82 @@ type Directory struct {
 	Header    string
 	Directory string
 	Template  string
+	PHP       string
+	Perl      string
+	Python    string
+	Bash      string
+	// name, date, size
+	Sort      string
+	Direction string
 	// location either in embed or elsewhere. I'll put a default in.
+}
+
+func New(lgOut *log.Logger, srv string, opts map[string]string) Directory {
+	var err error
+	d := Directory{
+		Lgout:     lgOut,
+		Px:        15,
+		Srv:       srv,
+		Header:    "MyFiles",
+		Default:   "index.html",
+		Sort:      "time",
+		Direction: "dec",
+	}
+	d.Perl, err = exec.LookPath("perl")
+	if err != nil {
+		d.Perl = "notfound"
+	}
+	d.PHP, err = exec.LookPath("php-cgi")
+	if err != nil {
+		d.PHP = "notfound"
+	}
+	d.Python, err = exec.LookPath("python")
+	if err != nil {
+		d.Python = "notfound"
+	}
+	d.Bash, err = exec.LookPath("bash")
+	if err != nil {
+		d.Bash = "notfound"
+	}
+
+	for key, value := range opts {
+		switch key {
+		case "Px":
+			if px, err := strconv.Atoi(value); err == nil {
+				d.Px = px
+			}
+		case "Header":
+			d.Header = value
+		}
+	}
+
+	return d
+}
+func queryPath(uri string) (string, string) {
+	parsedUrl, _ := url.Parse(uri)
+	return parsedUrl.Path, parsedUrl.RawQuery
 }
 
 func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 	//var upDir string
 	// This will hold the default page, if the d.Default file is found.
+	var cgiRun cgi.Handler //server.CgiServer()
+
 	var sty string
+	var err error
 	timeFormat := "2006-01-02 15:04:05"
 	reqDir := strings.Trim(r.RequestURI, "/")
 	reqCount := len(strings.Split(strings.Trim(d.BaseURI, "/"), "/"))
 	blackFile := blackFile(d.Px)
 	blackFolder := blackFolder(d.Px)
 	reqDirA := strings.Split(reqDir, "/")[reqCount:]
-	srv := fmt.Sprintf("%v/%v", d.Srv, strings.TrimRight(strings.Join(reqDirA, "/"), "/"))
+	srv, query := queryPath(fmt.Sprintf("%v/%v", d.Srv, strings.TrimRight(strings.Join(reqDirA, "/"), "/")))
+	query, err = url.QueryUnescape(query)
+	if err != nil {
+		d.Lgout.Printf("Error unescaping query: %v", err)
+		http.Error(w, "Error processing query", http.StatusBadRequest)
+		return
+	}
 	dir, err := os.Stat(srv)
 	if err != nil {
 		w.WriteHeader(404)
@@ -62,9 +128,10 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("%v", err), 404)
 			return
 		}
+		fslist = d.sortFSlist(fslist)
 
 		//fmt.Fprintln(w, "<html>\n\t<head>\n\t\t<style>table, th, td {border: 0px;padding: 0px;} tr:nth-child(odd) {background-color: #E0E0E0;}\n\t\t</style>\n\t</head>")
-		fmt.Fprintln(w, "<html><head><link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css\" integrity=\"sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm\" crossorigin=\"anonymous\"></head><body>")
+		fmt.Fprintf(w, "<html><head>%s</head><body>\n", getHeader())
 		// Detect if there is a default file in there.
 		if d.DefPlace && d.Default != "" {
 			for _, f := range fslist {
@@ -90,7 +157,7 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 		}
 		fmt.Fprintln(w, `<div class="container"`)
 		if d.Header != "" {
-			fmt.Fprintf(w, "\t<body>\n\t<br>\n\t<br>\n\t<br>\n\t<h1>%v</h1>\n", toTitle(d.Header))
+			fmt.Fprintf(w, "\t<body>\n\t<br>\n\t<br>\n\t<br>\n\t<h1>%v</h1>\n", d.Header)
 		} else {
 			fmt.Fprintln(w, "<body><br><br><br>")
 		}
@@ -101,9 +168,9 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "\t<a href='%v/'>Parent Directory</a>\n", upDir)
 		}
 
-		fmt.Fprintln(w, `<hr><table class="table table-striped table-hover">`)
+		fmt.Fprintln(w, `<hr><table class="table table-hover">`)
 		fmt.Fprintln(w, `<thead class="thead-dark">`)
-		fmt.Fprintln(w, `<tr><th style="width: 3%" ></th><th>Name</th><th>Size</th><th>Date</th></tr>`)
+		fmt.Fprintln(w, `<tr><th style="width: 3%" ></th><th>Name</th><th>Size</th><th>Date</th><th></th></tr>`)
 		for i, f := range fslist {
 			var ico string
 			fstat, err := os.Stat(f)
@@ -117,16 +184,29 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 			}
 			//Odd or even:
 			if i%2 == 0 {
-				sty = fmt.Sprint(`class="table-light"`)
+				sty = fmt.Sprint(`class="table-default"`)
 			} else {
-				sty = fmt.Sprint(`class="table-light"`)
+				sty = fmt.Sprint(`class="table-success"`)
 			}
+
 			//link := fmt.Sprintf("<a href='%v/%v'>%v</a>", r.URL, fstat.Name(), fstat.Name())
 			link := fmt.Sprintf("<a href='%v/%v'>%v</a>", r.RequestURI, fstat.Name(), fstat.Name())
 			// 'File Permissions' 'Link to file', 'File name' 'file size' 'file modifiied'
 			link = strings.ReplaceAll(link, "//", "/")
-			out := fmt.Sprintf("\n\t\t<tr %s>\n\t\t\t<td>%v</td>\n\t\t\t<td>%v</td>\n\t\t\t<td>%v</td>\n\t\t\t<td>%v</td>\n\t\t</tr>\n", sty, ico, link, byten.Size(fstat.Size()), fstat.ModTime().Format(timeFormat))
+			fullLink := fmt.Sprintf("%v/%v/%v", r.Host, r.RequestURI, fstat.Name())
+			fullLink = "https://" + strings.ReplaceAll(fullLink, "//", "/")
+			out := fmt.Sprintf(`
+          <tr %s>
+			<td>%v</td>
+			<td>%v</td>
+			<td>%v</td>
+			<td>%v</td>
+			<td><button class="btn btn-outline-primary btn-sm rounded" onclick="copyToClipboard('%v')">Copy Link</button>
+				<button class="btn btn-outline-success btn-sm rounded" onclick="copyToClipboard('wget --output-document=%v %v')">wget</button>
+			</td>
+		  </tr>`, sty, ico, link, byten.Size(fstat.Size()), fstat.ModTime().Format(timeFormat), fullLink, fstat.Name(), fullLink)
 			fmt.Fprintf(w, "%v", out)
+
 		}
 		fmt.Fprintln(w, "\n\t\t\t</table></div>\n\t\t<hr>\n\t")
 		if !d.DefPlace && d.Default != "" {
@@ -137,14 +217,55 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 					if err != nil {
 						fmt.Fprintf(w, "<b>Error Reading %s</b>%v", err)
 					}
-					if filepath.Ext(srv) == ".md" {
+					switch filepath.Ext(srv) {
+					case ".md":
 						mdHtml, err := mdToHTML(b)
 						if err != nil {
 							d.Lgout.Println("Error converting markdown to html", err)
 							w.Write(b)
 						}
 						w.Write(mdHtml)
-					} else {
+
+					case ".php": //, ".pl", ".py", ".sh":
+						cgiRun.Path = "/usr/bin/php-cgi"
+						cgiRun.Dir = filepath.Dir(f)
+						cgiRun.Env = []string{"SCRIPT_FILENAME=" + f}
+						d.Lgout.Println("php")
+						d.Lgout.Println(cgiRun)
+						cgiRun.ServeHTTP(w, r)
+					case ".pl":
+						cgiRun.Path = "/usr/bin/perl"
+						cgiRun.Dir = filepath.Dir(f)
+						cgiRun.Env = []string{"SCRIPT_FILENAME=" + f}
+						cgiRun.ServeHTTP(w, r)
+					case ".py":
+						cgiRun.Path = "/usr/bin/python"
+						cgiRun.Dir = filepath.Dir(f)
+						cgiRun.Env = []string{"SCRIPT_FILENAME=" + f}
+						cgiRun.ServeHTTP(w, r)
+					case ".sh":
+						cgiRun.Path = "/bin/bash"
+						cgiRun.Dir = filepath.Dir(f)
+						cgiRun.Env = []string{"SCRIPT_FILENAME=" + f}
+						cgiRun.ServeHTTP(w, r)
+
+						//if php, err := exec.LookPath("php"); err != nil {
+						//	d.Lgout.Println("php is not in the executable path")
+						//	w.Write(b)
+						//} else {
+						//	// Retrieve posted variables
+						//	postedVars := r.PostForm.Encode()
+						//	cmd := fmt.Sprintf("%v %v", php, f)
+						//	// Execute PHP script with posted variables
+						//	phpHtml, err := script.Echo(postedVars).Exec(cmd).Bytes()
+						//	if err != nil {
+						//		d.Lgout.Println("Error executing php", err)
+						//		w.Write(b)
+						//	}
+						//	w.Write(phpHtml)
+
+					default:
+						d.Lgout.Println("default")
 						w.Write(b)
 					}
 					fmt.Fprintf(w, "<hr><br>")
@@ -169,27 +290,118 @@ func (d *Directory) Fileserver(w http.ResponseWriter, r *http.Request) {
 		//
 
 		if !strings.Contains(FileContentType, "executable") {
-			if filepath.Ext(srv) == ".md" {
-				d.Lgout.Println("Render Markdown", srv)
-				source, err := os.ReadFile(srv)
-				d.Lgout.Println("len source", len(source), err)
-				if err != nil {
-					d.Lgout.Println("Could not read", srv)
-					fmt.Fprintln(w, "Could not read", srv)
-					return
-				} else {
-					d.Lgout.Println("ext", filepath.Ext(srv))
-				}
+			source, err := os.ReadFile(srv)
+			if err != nil {
+				d.Lgout.Println("Could not read", srv)
+				fmt.Fprintln(w, "Could not read", srv)
+				return
+			} else {
+				d.Lgout.Println("ext", filepath.Ext(srv))
+			}
+
+			switch filepath.Ext(srv) {
+			case ".md":
 				mdHtml, err := mdToHTML(source)
 				if err != nil {
 					d.Lgout.Println("Error converting markdown to html", err)
+					source, err := os.ReadFile(srv)
+					if err != nil {
+						d.Lgout.Println("Could not read", srv)
+						fmt.Fprintln(w, "Could not read", srv)
+						w.Write(source)
+						return
+					} else {
+						d.Lgout.Println("extension", filepath.Ext(srv))
+					}
 					w.Write(source)
 				}
 				w.Write(mdHtml)
+			case ".php": //, ".pl", ".py", ".sh":
+				//out, err := script.Echo("query").Exec(fmt.Sprintf("/usr/bin/php %s", srv)).Bytes()
+
+				//cmd := exec.Command("/usr/bin/php-cgi", []string{"-q", srv, query}...)
+				//cmd.Dir = filepath.Dir(srv)
+				//out, err := cmd.Output()
+				if d.PHP == "notfound" || d.PHP == "" {
+					var err error
+					d.PHP, err = exec.LookPath("php-cgi")
+					if err != nil {
+						d.Lgout.Println("php-cgi not found.")
+						w.Write(source)
+						break
+					}
+				}
+				cmd := fmt.Sprintf("%s -q %s %s")
+				out, err := script.Exec(cmd).Bytes()
+				if err != nil {
+					d.Lgout.Printf("Error executing php %v", err)
+					w.Write([]byte(fmt.Sprintf("Error executing php %v", err)))
+				} else {
+					d.Lgout.Printf("Exec PHP: /usr/bin/php %s -- %s", srv, query)
+					w.Write(out)
+				}
+
+			case ".pl":
+				if d.Perl == "notfound" || d.Perl == "" {
+					var err error
+					d.Perl, err = exec.LookPath("perl")
+					if err != nil {
+						d.Lgout.Println("perl not found.")
+						w.Write(source)
+						break
+					}
+				}
+				cmd := fmt.Sprintf("%s %s %s", d.Perl, srv, query)
+				out, err := script.Exec(cmd).Bytes()
+				if err != nil {
+					d.Lgout.Printf("Error executing perl %v", err)
+					w.Write([]byte(fmt.Sprintf("Error executing perl %v", err)))
+				} else {
+					d.Lgout.Printf("Exec Perl: %s %s -- %s", d.Perl, srv, query)
+					w.Write(out)
+				}
+
+			case ".py":
+				if d.Python == "notfound" || d.Python == "" {
+					var err error
+					d.Python, err = exec.LookPath("python")
+					if err != nil {
+						d.Lgout.Println("python not found.")
+						w.Write(source)
+						break
+					}
+				}
+				cmd := fmt.Sprintf("%s %s %s", d.Python, srv, query)
+				out, err := script.Exec(cmd).Bytes()
+				if err != nil {
+					d.Lgout.Printf("Error executing python %v", err)
+					w.Write([]byte(fmt.Sprintf("Error executing python %v", err)))
+				} else {
+					d.Lgout.Printf("Exec Python: %s %s -- %s", d.Python, srv, query)
+					w.Write(out)
+				}
+			case ".sh":
+				if d.Bash == "notfound" || d.Bash == "" {
+					var err error
+					d.Bash, err = exec.LookPath("bash")
+					if err != nil {
+						d.Lgout.Println("bash not found.")
+						w.Write(source)
+						break
+					}
+				}
+				cmd := fmt.Sprintf("%s %s %s", d.Bash, srv, query)
+				out, err := script.Exec(cmd).Bytes()
+				if err != nil {
+					d.Lgout.Printf("Error executing bash %v", err)
+					w.Write([]byte(fmt.Sprintf("Error executing bash %v", err)))
+				} else {
+					d.Lgout.Printf("Exec Bash: %s %s -- %s", d.Bash, srv, query)
+					w.Write(out)
+				}
+			default:
+				w.Write(source)
 			}
-			openFile.Seek(0, 0)
-			io.Copy(w, openFile)
-			//http.Error(w, "OK", 200)
 			return
 		} else {
 			w.Header().Set("Content-Disposition", "attachment; filename="+dir.Name())
@@ -223,6 +435,31 @@ func toTitle(input string) string {
 	return cases.Title(language.English).String(input)
 }
 
+func (d *Directory) getHeader() string {
+	ret := fmt.Sprintf(`
+		<title>%s</title>
+		<
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+        <script>
+            function copyToClipboard(text) {
+                navigator.clipboard.writeText(text).then(function() {
+                    // Show feedback message
+                    var feedback = document.getElementById('clipboard-feedback');
+                    feedback.innerText = 'Copied to clipboard!';
+                    feedback.style.display = 'block';
+                    setTimeout(function() {
+                        feedback.style.display = 'none';
+                    }, 2000);
+                }, function(err) {
+                    console.error('Could not copy text: ', err);
+                });
+            }
+        </script>
+        <div id="clipboard-feedback" style="display: none; position: fixed; top: 10px; right: 10px; background-color: #28a745; color: white; padding: 10px; border-radius: 5px; z-index: 1000;"></div>
+    `, d.Header)
+	return ret
+}
+
 //func mdToHTML(md []byte) []byte {
 //	md = markdown.NormalizeNewlines(md)
 //	exts := parser.CommonExtensions // parser.OrderedListStart | parser.NoEmptyLineBeforeBlock
@@ -249,4 +486,17 @@ func mdToHTML(md []byte) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func sortBy(sort, direction string) string {
+	switch sort {
+	case "name":
+		return "name"
+	case "size":
+		return "size"
+	case "date":
+		return "date"
+	default:
+		return "name"
+	}
 }
